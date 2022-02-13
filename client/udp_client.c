@@ -45,7 +45,7 @@ void process_command(char *input)
 {
   char *p = input;
   char *end;
-
+    
   // find end of string
   for (end = input; *end != '\0'; end++)
     ;
@@ -85,8 +85,7 @@ void process_command(char *input)
   {
 	strcpy(&input[0], argv[1]); 
     bzero(filename, 200);
-    strcpy(filename, argv[1]);
-    printf("%s %s\n", filename, argv[1]);
+    strncpy(filename, argv[0], strlen(argv[0]));
   }
 }
 

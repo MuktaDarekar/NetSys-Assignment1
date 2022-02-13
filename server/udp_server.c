@@ -54,22 +54,25 @@ void process_command(char *input)
   for (end = input; *end != '\0'; end++)
     ;
 
-  // Lexical analysis: Tokenize input in place
+  // Tokenize input in place
   bool in_token = false;
   char *argv[10];
   int argc = 0;
   memset(argv, 0, sizeof(argv));
   for (p = input; p < end; p++) {
-    if (in_token && isspace(*p)) {
-      *p = '\0';
-      in_token = false;
-    } else if (!in_token && !isspace(*p)) {
-      argv[argc++] = p;
-      in_token = true;
-      if (argc == sizeof(argv)/sizeof(char*) - 1)
-        // too many arguments! drop remainder
-        break;
+
+    if ((*p != ' ') && !in_token)
+    {
+    	argv[argc] = p;
+    	argc++;
+    	in_token=1;
     }
+    else if (in_token && *p == ' ')
+    {
+    	in_token=0;
+    	*p = '\0';
+    }
+
   }
   argv[argc] = NULL;
   if (argc == 0)   // no command
@@ -86,14 +89,15 @@ void process_command(char *input)
 		}
 	}
 	
+	bzero(filename, 200);
   if (cmd_index == 2)
 	{
-		strncpy(input, "rm ", 3);  
-		strncpy(input+3, argv[1], strlen(argv[1]));  
+		strncpy(filename, "rm ", 3);  
+		strcat(filename, argv[1]);  
 	}
   else if(cmd_index < 2)
 	{
-		strcpy(&input[0], argv[1]); 
+		strcpy(&filename[0], argv[1]); 
 		//strncpy(&filename[0], argv[1], strlen(argv[1]));
 	}
 }
@@ -346,8 +350,9 @@ int main(int argc, char **argv) {
     switch (cmd_index)
     {
     	case 0:
-    		bzero(filename, 200);
-    		strcat(filename, buf);
+    		//bzero(filename, 200);
+    		//strcat(filename, buf);
+    		printf("%s\n", filename);
     		fd = open(&filename[0], O_CREAT | O_APPEND | O_RDWR, 0764);
 			if (fd == -1)
 				{
@@ -364,8 +369,9 @@ int main(int argc, char **argv) {
     	break;
     	
     	case 1:
-    		bzero(filename, 200);
-    		strcat(filename, buf);
+    		//bzero(filename, 200);
+    		//strcat(filename, buf);
+    		printf("%s\n", filename);
 			fd = open(&filename[0], O_RDWR, 0764);
 			if (fd == -1)
 			{
@@ -387,10 +393,10 @@ int main(int argc, char **argv) {
     	break;
     	
     	case 2:
-			printf("%s\n", buf);
-    		system(buf);
+			printf("%s\n", filename);
+    		system(filename);
     	
-			n = sendto(sockfd, buf, strlen(buf), 0, 
+			n = sendto(sockfd, filename, strlen(filename), 0, 
 				   (struct sockaddr *) &clientaddr, clientlen);
 			if (n < 0) 
 			  error("ERROR in sendto");

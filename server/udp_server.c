@@ -54,30 +54,27 @@ void process_command(char *input)
   for (end = input; *end != '\0'; end++)
     ;
 
-  // Tokenize input in place
+    // Lexical analysis: Tokenize input in place
   bool in_token = false;
   char *argv[10];
   int argc = 0;
   memset(argv, 0, sizeof(argv));
   for (p = input; p < end; p++) {
-
-    if ((*p != ' ') && !in_token)
-    {
-    	argv[argc] = p;
-    	argc++;
-    	in_token=1;
+    if (in_token && isspace(*p)) {
+      *p = '\0';
+      in_token = false;
+    } else if (!in_token && !isspace(*p)) {
+      argv[argc++] = p;
+      in_token = true;
+      if (argc == sizeof(argv)/sizeof(char*) - 1)
+        // too many arguments! drop remainder
+        break;
     }
-    else if (in_token && *p == ' ')
-    {
-    	in_token=0;
-    	*p = '\0';
-    }
-
   }
   argv[argc] = NULL;
   if (argc == 0)   // no command
     return;
-
+    
   // Dispatch command to command handler
   for (cmd_index = 0; cmd_index<MAX_CMD; cmd_index++)
 	{
@@ -93,12 +90,12 @@ void process_command(char *input)
   if (cmd_index == 2)
 	{
 		strncpy(filename, "rm ", 3);  
-		strcat(filename, argv[1]);  
+		strncat(filename, argv[1], strlen(argv[1]));  
 	}
   else if(cmd_index < 2)
 	{
-		strcpy(&filename[0], argv[1]); 
-		//strncpy(&filename[0], argv[1], strlen(argv[1]));
+		//strcpy(&filename[0], argv[1]); 
+		strncpy(&filename[0], argv[1], strlen(argv[1]));
 	}
 }
 
@@ -153,7 +150,7 @@ void reliable_put()
 		// number of bytes
 		*str++;
 		*str++;
-		printf("n = %d bytes = %d  packet = %c data = %s\n", n, bytes, packet, str);
+		//printf("n = %d bytes = %d  packet = %c data = %s\n", n, bytes, packet, str);
 		
 		if ((n <= 1) || (bytes != n-2))
 		{
@@ -183,7 +180,7 @@ void reliable_put()
 		if (n < 0) 
 		  error("ERROR in sendto");
 		
-		printf("Packet %c received successfully\n", packet);
+		//printf("Packet %c received successfully\n", packet);
 	}
 	close(fd);
 	printf("Received file %s successfully\n", &filename[0]);
@@ -224,13 +221,13 @@ void reliable_get()
 		}
 		databuf[1] = ret;
 		
-		printf("%s\n", databuf);
+		//printf("%s\n", databuf);
 		
 		n = sendto(sockfd, databuf, ret+2, 0, (struct sockaddr *) &clientaddr, clientlen);
 		if (n < 0) 
 		  error("ERROR in sendto");
 		
-		printf("Packet %c sent\n", packet);
+		//printf("Packet %c sent\n", packet);
 		
 		bzero(databuf, 105);
 		/* print the server's reply */
@@ -247,7 +244,7 @@ void reliable_get()
 		}
 		else if (packet == databuf[0])
 		{
-			printf("Packet %c recieved successfully\n", databuf[0]);
+			//printf("Packet %c recieved successfully\n", databuf[0]);
 			prv_bytes += ret;
 			packet++;
 			if(packet > '9')
@@ -352,8 +349,8 @@ int main(int argc, char **argv) {
     	case 0:
     		//bzero(filename, 200);
     		//strcat(filename, buf);
-    		printf("%s\n", filename);
-    		fd = open(&filename[0], O_CREAT | O_APPEND | O_RDWR, 0764);
+    		//printf("%s\n", filename);
+    		fd = open(&filename[0], O_CREAT | O_TRUNC | O_RDWR, S_IRWXU);
 			if (fd == -1)
 				{
 					error("ERROR opening file");
@@ -371,8 +368,11 @@ int main(int argc, char **argv) {
     	case 1:
     		//bzero(filename, 200);
     		//strcat(filename, buf);
-    		printf("%s\n", filename);
-			fd = open(&filename[0], O_RDWR, 0764);
+    		//printf("%s\n", filename);
+    		//for(int i=0; i<strlen(filename); i++)
+    		//	printf("%x ", filename[i]);
+    		//	printf("\n");
+			fd = open(&filename[0], O_RDWR, S_IRWXU);
 			if (fd == -1)
 			{
 				n = sendto(sockfd, "File not found", 15, 0, 

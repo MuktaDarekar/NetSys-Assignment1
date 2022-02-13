@@ -117,7 +117,7 @@ void reliable_put()
     
 	printf("Sending file %s\n", &filename[0]);
 	
-	fd = open(&filename[0], O_RDWR, 0764);
+	fd = open(&filename[0], O_RDWR, S_IRWXU);
 	if (fd == -1)
 		{
         	error("ERROR opening file");
@@ -149,13 +149,13 @@ void reliable_put()
 		}
 		databuf[1] = ret;
 		
-		printf("%s\n", databuf);
+		//printf("%s\n", databuf);
 		
 		n = sendto(sockfd, databuf, ret+2, 0, &serveraddr, serverlen);
 		if (n < 0) 
 		  error("ERROR in sendto");
 		
-		printf("Packet %c sent\n", packet);
+		//printf("Packet %c sent\n", packet);
 		
 		bzero(databuf, 105);
 		/* print the server's reply */
@@ -171,7 +171,7 @@ void reliable_put()
 		}
 		else if (packet == databuf[0])
 		{
-			printf("Packet %c recieved successfully\n", databuf[0]);
+			//printf("Packet %c recieved successfully\n", databuf[0]);
 			prv_bytes += ret;
 			packet++;
 			if(packet > '9')
@@ -198,7 +198,7 @@ void reliable_get()
 		
 	printf("Receiving file %s\n", &filename[0]);
 	
-	fd = open(&filename[0], O_CREAT | O_APPEND | O_RDWR, 0764);
+	fd = open(&filename[0], O_CREAT | O_TRUNC | O_RDWR, S_IRWXU);
 	if (fd == -1)
 		{
 			error("ERROR opening file");
@@ -228,7 +228,7 @@ void reliable_get()
 		// number of bytes
 		*str++;
 		*str++;
-		printf("n = %d bytes = %d  packet = %c data = %s\n", n, bytes, packet, str);
+		//printf("n = %d bytes = %d  packet = %c data = %s\n", n, bytes, packet, str);
 		
 		if ((n <= 1) || (bytes != n-2))
 		{
@@ -256,7 +256,7 @@ void reliable_get()
 		if (n < 0) 
 		  error("ERROR in sendto");
 		
-		printf("Packet %c received successfully\n", packet);
+		//printf("Packet %c received successfully\n", packet);
 	}
 	close(fd);
 	printf("Received file %s successfully\n", &filename[0]);
@@ -320,6 +320,7 @@ int main(int argc, char **argv) {
 		  
 		process_command(buf);
 			
+		bzero(buf, BUFSIZE);
 		/* print the server's reply */
 		n = recvfrom(sockfd, buf, BUFSIZE, 0, &serveraddr, &serverlen);
 		if (n < 0) 

@@ -14,6 +14,9 @@
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <ctype.h>
+#include <sys/stat.h>
+#include <fcntl.h>
+
 
 #define BUFSIZE 1024
 #define MAX_CMD	5
@@ -31,7 +34,11 @@ char cmd_table[MAX_CMD][12] = { "put", "get", "delete", "ls", "exit"};
 char cmd_size[MAX_CMD] = { 3, 3, 6, 2, 4};
 char cmd_arg[MAX_CMD] = { 2, 2, 2, 1, 1};
 int cmd_index=0;
-
+char filename[200] = {0};//"/home/mukta/NETSYS/PA1_udp_example/NetSys-Assignment1/server/";
+int fd=0;
+int sockfd, n; /* socket */
+int clientlen; /* byte size of client's address */
+struct sockaddr_in clientaddr; /* client addr */
 /*
  * Process a received command string, and send response.
  *
@@ -87,15 +94,178 @@ void process_command(char *input)
   else if(cmd_index < 2)
 	{
 		strcpy(&input[0], argv[1]); 
+		//strncpy(&filename[0], argv[1], strlen(argv[1]));
 	}
 }
 
+uint32_t get_parity(char *pbuf, int bytes)
+{
+	uint32_t parity = 0;
+	
+	while(bytes)
+	{
+		while(*pbuf)
+		{
+			parity++;
+			*pbuf = *pbuf & ((*pbuf) - 1);
+		}
+		*pbuf++;
+		bytes--;		
+	}
+	
+	return parity;
+}
+
+void reliable_put()
+{	
+    char *str = NULL;
+    char databuf[105] = {0};
+    int bytes = 0;
+	char packet = 0;
+	uint32_t parity = 0;
+		
+	printf("Receiving file %s\n", &filename[0]);
+		
+	while(1)
+	{
+		bzero(databuf, 105);
+		str = &databuf[0];
+		
+		n = recvfrom(sockfd, databuf, 105, 0,
+		 	(struct sockaddr *) &clientaddr, &clientlen);
+		if (n < 0)
+		{
+		  error("ERROR in recvfrom");
+		}
+		  
+		if(strncmp(databuf, "done", 4) == 0)
+		{
+			break;
+		}
+		// first 4 bytes packet number
+		packet = databuf[0];
+		bytes = databuf[1];
+		
+		// number of bytes
+		*str++;
+		*str++;
+		printf("n = %d bytes = %d  packet = %c data = %s\n", n, bytes, packet, str);
+		
+		if ((n <= 1) || (bytes != n-2))
+		{
+			databuf[0] = packet;
+			databuf[1] = 0xFF;
+			n = sendto(sockfd, databuf, strlen(databuf), 0, 
+					   (struct sockaddr *) &clientaddr, clientlen);
+			if (n < 0) 
+			  error("ERROR in sendto");
+			printf("Packet %c resend\n", packet);
+			continue;
+		}
+		// write max 100 bytes to file
+		n = write(fd, str, bytes);
+		if(n == -1)
+		{
+        	error("ERROR writing file");
+        	break;
+		} 
+		
+		bzero(databuf, 105);
+		// first 4 bytes packet number
+		databuf[0] = packet;
+		databuf[1] = 0x01;
+		n = sendto(sockfd, databuf, strlen(databuf), 0, 
+				   (struct sockaddr *) &clientaddr, clientlen);
+		if (n < 0) 
+		  error("ERROR in sendto");
+		
+		printf("Packet %c received successfully\n", packet);
+	}
+	close(fd);
+	printf("Received file %s successfully\n", &filename[0]);
+}
+
+void reliable_get()
+{	
+    char *str = NULL;
+    char databuf[105] = {0};
+    int ret = 0;
+	char packet = '0';
+	int prv_bytes = 0;
+    
+	printf("Sending file %s\n", &filename[0]);
+			
+	while(1)
+	{
+		bzero(databuf, 105);
+		str = &databuf[0];
+		// first 4 bytes packet number
+		*str++ = packet;
+		*str++; 
+		// Read max 100 bytes from file
+		ret = read(fd, str, 100);
+		if(ret == -1)
+		{
+        	error("ERROR reading file");
+        	//add packet check
+        	break;
+		} 
+		if(ret == 0)
+		{
+			printf("done sending\n", ret);
+			n = sendto(sockfd, "done", 5, 0, (struct sockaddr *) &clientaddr, clientlen);
+			if (n < 0) 
+			  error("ERROR in sendto");
+			break;
+		}
+		databuf[1] = ret;
+		
+		printf("%s\n", databuf);
+		
+		n = sendto(sockfd, databuf, ret+2, 0, (struct sockaddr *) &clientaddr, clientlen);
+		if (n < 0) 
+		  error("ERROR in sendto");
+		
+		printf("Packet %c sent\n", packet);
+		
+		bzero(databuf, 105);
+		/* print the server's reply */
+		n = recvfrom(sockfd, databuf, 6, 0,
+		 	(struct sockaddr *) &clientaddr, &clientlen);
+		if (n < 0) 
+		  error("ERROR in recvfrom");	
+		  		  
+		if(databuf[1] == 0xFF)
+		{
+			printf("Packet %c resend\n", databuf[0]);
+			//add lseek to resend packet
+			printf("lseek = %d\n", lseek(fd, prv_bytes, SEEK_SET));
+		}
+		else if (packet == databuf[0])
+		{
+			printf("Packet %c recieved successfully\n", databuf[0]);
+			prv_bytes += ret;
+			packet++;
+			if(packet > '9')
+				packet = '0';
+		}
+		else
+		{
+			printf("Packet %c resend\n", databuf[0]);
+			//add lseek to resend packet
+			printf("lseek = %d\n", lseek(fd, prv_bytes, SEEK_SET));
+		}
+	}
+	close(fd);
+	printf("Sent file %s successfully\n", &filename[0]);
+}
+
 int main(int argc, char **argv) {
-  int sockfd; /* socket */
+  //int sockfd; /* socket */
   int portno; /* port to listen on */
-  int clientlen; /* byte size of client's address */
+  //int clientlen; /* byte size of client's address */
   struct sockaddr_in serveraddr; /* server's addr */
-  struct sockaddr_in clientaddr; /* client addr */
+  //struct sockaddr_in clientaddr; /* client addr */
   struct hostent *hostp; /* client host info */
   char buf[BUFSIZE]; /* message buf */
   char *hostaddrp; /* dotted decimal host addr string */
@@ -176,11 +346,44 @@ int main(int argc, char **argv) {
     switch (cmd_index)
     {
     	case 0:
-    		
+    		bzero(filename, 200);
+    		strcat(filename, buf);
+    		fd = open(&filename[0], O_CREAT | O_APPEND | O_RDWR, 0764);
+			if (fd == -1)
+				{
+					error("ERROR opening file");
+				 	break;
+				}
+				
+    		n = sendto(sockfd, "File created", 13, 0, 
+				   (struct sockaddr *) &clientaddr, clientlen);
+			if (n < 0) 
+			  error("ERROR in sendto");
+			  
+			reliable_put();    		
     	break;
     	
     	case 1:
-    		
+    		bzero(filename, 200);
+    		strcat(filename, buf);
+			fd = open(&filename[0], O_RDWR, 0764);
+			if (fd == -1)
+			{
+				n = sendto(sockfd, "File not found", 15, 0, 
+				   (struct sockaddr *) &clientaddr, clientlen);
+				if (n < 0) 
+		  			error("ERROR in sendto");
+				printf("ERROR opening file");
+			}
+			else
+			{		
+    			n = sendto(sockfd, "File found", 11, 0, 
+				   (struct sockaddr *) &clientaddr, clientlen);
+				if (n < 0) 
+		  			error("ERROR in sendto");
+		  		
+		  		reliable_get(); 
+			}
     	break;
     	
     	case 2:
@@ -234,5 +437,8 @@ int main(int argc, char **argv) {
     	break;
   }
 }
+
+
+
 
 
